@@ -1,8 +1,12 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+from database import create_document
+from schemas import Audit
 
-app = FastAPI()
+app = FastAPI(title="AI Agency Backend", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -14,7 +18,7 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "Hello from FastAPI Backend!"}
+    return {"message": "AI Agency API running"}
 
 @app.get("/api/hello")
 def hello():
@@ -33,7 +37,6 @@ def test_database():
     }
     
     try:
-        # Try to import database module
         from database import db
         
         if db is not None:
@@ -42,10 +45,9 @@ def test_database():
             response["database_name"] = db.name if hasattr(db, 'name') else "✅ Connected"
             response["connection_status"] = "Connected"
             
-            # Try to list collections to verify connectivity
             try:
                 collections = db.list_collection_names()
-                response["collections"] = collections[:10]  # Show first 10 collections
+                response["collections"] = collections[:10]
                 response["database"] = "✅ Connected & Working"
             except Exception as e:
                 response["database"] = f"⚠️  Connected but Error: {str(e)[:50]}"
@@ -57,12 +59,37 @@ def test_database():
     except Exception as e:
         response["database"] = f"❌ Error: {str(e)[:50]}"
     
-    # Check environment variables
     import os
     response["database_url"] = "✅ Set" if os.getenv("DATABASE_URL") else "❌ Not Set"
     response["database_name"] = "✅ Set" if os.getenv("DATABASE_NAME") else "❌ Not Set"
     
     return response
+
+# ---------------- Mini Audit Endpoint ----------------
+class AuditRequest(BaseModel):
+    company_name: str
+    contact_email: str
+    industry: Optional[str] = None
+    team_size: Optional[str] = None
+    processes: List[str] = []
+    pain_points: Optional[str] = None
+    current_tools: Optional[str] = None
+    budget_range: Optional[str] = None
+    urgency: Optional[str] = None
+
+@app.post("/api/audit")
+def submit_audit(audit: AuditRequest):
+    try:
+        # Validate against main schema and persist
+        audit_doc = Audit(**audit.model_dump())
+        inserted_id = create_document("audit", audit_doc)
+        return {
+            "status": "success",
+            "id": inserted_id,
+            "message": "Merci ! Votre mini audit a bien été reçu. Nous revenons vers vous rapidement."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
